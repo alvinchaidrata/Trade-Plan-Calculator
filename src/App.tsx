@@ -1,137 +1,53 @@
-import React, { useState, useEffect } from "react"
-
-interface Plan {
-    amount : number
-    price  : number
-    supps  : number[]
-    tps    : number[]  
-    cl     : number
-}
-
-interface ProfitProj {
-    value      : number
-    percentage : number
-    ratio      : number
-}
-
-interface Projection {
-    ratios : number[]
-    lots   : number[]
-    vals   : number[]
-    avgs   : number[]
-    movingVals : number[]
-    losses     : number[]
-    projections    : ProfitProj[][]
-    lossValue      : number
-    lossPercentage : number
-}
+import { useState } from "react"
+import { Plan, Projection } from "./types"
+import calcProjection from "./lib/calculateProjection"
+import PageLayout from "./Components/PageLayout"
+import PlanComponent from "./Components/PlanComponent"
+import BestProjection from "./Components/BestProjection"
+import OtherProjections from "./Components/OtherProjections"
 
 const App = () => {
-    const [plan, setPlan] = useState<Plan>({
-        amount : 1000000,
-        price  : 100,
-        supps  : [90,80],
-        tps    : [110,114],
-        cl     : 88
-    })
+    const [best, setBest]     = useState<Projection | null>(null)
+    const [others, setOthers] = useState<Projection[] | null>(null)
 
-    const [proj, setProj] = useState<Projection | null>(null)
+    const findBestPlan = (plan : Plan) => {
+        let plans = [
+            calcProjection(plan, [3, 7], '3-7'),
+            calcProjection(plan, [5, 5], '5-5'),
+            calcProjection(plan, [1.5, 1.5, 7], '1.5-1.5-7'),
+            calcProjection(plan, [2, 3, 5], '2-3-5'),
+        ]
 
-    const calcProjection = (ratios : number[]) => {
-        let prices = [plan.price, ...plan.supps]
-
-        let lots : number[] = []
-        let vals : number[] = []
-        let avgs : number[] = []
-        let losses : number[] = []
-        let movingVals : number[] = []
-        
-        let lossValue      = 0
-        let lossPercentage = 0
-
-        ratios.forEach((ratio : number, idx : number) => {
-            let lot = Math.floor((plan.amount * ratio/10) / (prices[idx] * 100))
-            let val = lot * prices[idx] * 100
-
-            let avg  = 0
-            let loss = 0
-            let movingVal = 0
-            
-            if(idx > 0) {
-                avg       = (vals[idx-1] + val) / (lots[idx-1] + lot) / 100
-                movingVal = avg * (lots[idx-1] + lot)
-                loss      = movingVals[idx-1] * ((avgs[idx-1] - prices[idx]) / avgs[idx-1])
+        let losers      : Projection[] = []
+        let currentBest : Projection   = plans[0]
+        for(let i = 1; i < plans.length; i++) {
+            if(currentBest.projectionScore < plans[i].projectionScore) {
+                losers      = [...losers, currentBest]
+                currentBest = plans[i]
             } else {
-                avg       = prices[idx]
-                movingVal = val
-                loss      = 0
+                losers = [...losers, plans[i]]
             }
+        }
 
-            avgs.push(avg)
-            losses.push(loss)
-            vals.push(val)
-            lots.push(lot)
-            movingVals.push(movingVal)
-            
-            if(ratios.length === idx+1) {
-                lossValue      = movingVal * ((avg - plan.cl) / avg) * 100
-                lossPercentage = lossValue / vals.reduce((acc, val) => acc+val, 0) * 100
-            }
-        })
-
-        
-
-        let projections : ProfitProj[][] = [] 
-        plan.tps.forEach((tp : number) => {
-            let row : ProfitProj[] = []
-
-            for(let i = 0; i < ratios.length-1; i++) {
-                let per = (tp - avgs[i]) / avgs[i] * 100
-                let val = movingVals[i] * per / 100
-                let rat = val / lossValue
-
-                row.push({
-                    value : val,
-                    ratio : rat,
-                    percentage : per
-                })
-            }
-
-            projections.push(row)
-        })
-
-        setProj({
-            ratios : ratios,
-            lots   : lots,
-            vals   : vals,
-            avgs   : avgs,
-            movingVals : movingVals,
-            losses     : losses,
-            projections    : projections,
-            lossValue      : lossValue,
-            lossPercentage : lossPercentage
-        })
-
-        console.log({
-            ratios : ratios,
-            lots   : lots,
-            vals   : vals,
-            avgs   : avgs,
-            movingVals : movingVals,
-            losses     : losses,
-            projections    : projections,
-            lossValue      : lossValue,
-            lossPercentage : lossPercentage
-        })
+        setBest(currentBest)
+        setOthers(losers)
     }
 
-    useEffect(() => calcProjection([3,7]), [])
-
     return (
-        <div className='p-5 flex flex-col gap-y-8'>
-            
-        </div>
+        <PageLayout>
+            <div className='flex flex-col gap-y-10'>
+                <PlanComponent findBestPlan={findBestPlan} />
+
+                {best &&
+                    <BestProjection best={best} />
+                }
+
+                {others &&
+                    <OtherProjections others={others} />
+                }
+            </div>
+        </PageLayout>
     )
 }
 
-export default App;
+export default App
